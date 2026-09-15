@@ -1,0 +1,9 @@
+parameters:
+    level: max
+    paths:
+        - src
+        - tests/Unit
+        - tests/Integration
+    # tests/Pest is excluded: Pest closures are dynamically bound to the test case,
+    # which static analysis cannot see without Pest-specific stubs.
+    tmpDir: var/phpstan

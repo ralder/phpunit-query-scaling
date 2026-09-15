@@ -1,0 +1,9 @@
+{
+    "preset": "laravel",
+    "exclude": [
+        "var"
+    ],
+    "rules": {
+        "declare_strict_types": true
+    }
+}

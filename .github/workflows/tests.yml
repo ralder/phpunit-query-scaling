@@ -1,0 +1,53 @@
+name: tests
+
+on:
+    push:
+    pull_request:
+
+jobs:
+    tests:
+        name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+        runs-on: ubuntu-latest
+
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - { php: '8.3', laravel: '^12.0', testbench: '^10.0', deps: '' }
+                    - { php: '8.3', laravel: '^13.0', testbench: '^11.0', deps: '' }
+                    - { php: '8.4', laravel: '^12.0', testbench: '^10.0', deps: '' }
+                    - { php: '8.4', laravel: '^13.0', testbench: '^11.0', deps: '' }
+                    - { php: '8.5', laravel: '^12.0', testbench: '^10.0', deps: '' }
+                    - { php: '8.5', laravel: '^13.0', testbench: '^11.0', deps: '' }
+                    - { php: '8.3', laravel: '^12.0', testbench: '^10.0', deps: '--prefer-lowest' }
+                    - { php: '8.5', laravel: '^13.0', testbench: '^11.0', phpunit: '^13.0', pest: '^5.0', deps: '' }
+
+        steps:
+            - uses: actions/checkout@v5
+
+            - uses: shivammathur/setup-php@v2
+              with:
+                  php-version: ${{ matrix.php }}
+                  extensions: sqlite3, pdo_sqlite
+
+            - name: Pin Laravel stack
+              run: >
+                  composer require --no-interaction --no-update
+                  "laravel/framework:${{ matrix.laravel }}"
+                  "orchestra/testbench:${{ matrix.testbench }}"
+
+            - name: Pin PHPUnit/Pest (phpunit 13 job)
+              if: matrix.phpunit != ''
+              run: >
+                  composer require --no-interaction --no-update
+                  "phpunit/phpunit:${{ matrix.phpunit }}"
+                  "pestphp/pest:${{ matrix.pest }}"
+
+            - name: Install dependencies
+              run: composer update --no-interaction --prefer-dist ${{ matrix.deps }}
+
+            - name: Run tests
+              run: vendor/bin/phpunit
+
+            - name: Run Pest smoke suite
+              run: vendor/bin/pest tests/Pest

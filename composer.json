@@ -1,0 +1,53 @@
+{
+    "name": "ralder/phpunit-query-scaling",
+    "description": "Controlled multi-scale query-count assertions for Laravel tests (PHPUnit and Pest).",
+    "keywords": ["phpunit", "pest", "laravel", "testing", "query scaling", "performance"],
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "ralder"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/contracts": "^12.0 || ^13.0",
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/events": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.24",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "pestphp/pest": "^4.0",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ralder\\QueryScaling\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ralder\\QueryScaling\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:unit": "phpunit --testsuite=Unit",
+        "test:integration": "phpunit --testsuite=Integration",
+        "test:pest": "pest tests/Pest",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "format": "pint",
+        "format:test": "pint --test"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
