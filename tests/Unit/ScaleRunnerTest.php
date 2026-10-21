@@ -100,6 +100,29 @@ final class ScaleRunnerTest extends TestCase
         $this->assertSame([2 => 1, 5 => 1], $counts);
     }
 
+    public function test_ignore_filter_excludes_matching_queries_from_measurements(): void
+    {
+        $events = [];
+        $collector = new FakeCollector($events, queriesPerMeasure: [
+            [new RecordedQuery('testing', 'select * from sessions', []), new RecordedQuery('testing', 'select 1', [])],
+            [new RecordedQuery('testing', 'select * from sessions', []), new RecordedQuery('testing', 'select 1', [])],
+        ]);
+
+        $series = (new ScaleRunner($collector, new FakeIsolation($events)))->run(
+            ScaleFactors::make([2, 5]),
+            populate: fn (int $scale) => null,
+            warmup: null,
+            run: fn () => null,
+            ignore: static fn (RecordedQuery $query): bool => str_contains($query->sql, 'sessions'),
+        );
+
+        $this->assertSame([1, 1], $series->counts());
+        $this->assertSame(['select 1'], array_map(
+            static fn (RecordedQuery $query): string => $query->sql,
+            $series->measurements()[0]->queries,
+        ));
+    }
+
     public function test_isolation_is_restored_when_populate_throws(): void
     {
         $events = [];
