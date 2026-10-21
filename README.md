@@ -135,6 +135,14 @@ The trend line is a purely diagnostic least-squares fit over the measured checkp
 package can (and this one does not) prove an asymptotic complexity class from measurements:
 **the assertion verifies the contract at the measured scale factors only.**
 
+### A run that measures nothing fails
+
+If `run()` issues no queries on the measured connections at any scale, every growth contract
+would pass vacuously (`0 → 0 → 0` is "constant"). That almost always means the scenario talks
+to an unmeasured connection or never touches the populated data, so the assertion fails with
+`ExpectationFailedException` ("measured no queries") instead. Pass `allowNoQueries: true` when a
+query-free scenario is the intended contract (for example, a fully cached endpoint).
+
 ## Expectations
 
 | Factory | Passes when |
@@ -160,6 +168,7 @@ protected function assertQueriesScaleConstantly(
     ?IsolationStrategy $isolation = null,      // custom isolation override
     bool $showBindings = false,                // print ≤3 example bindings per growing fingerprint
     bool $normalizeLiterals = false,           // opt-in literal folding in fingerprints
+    bool $allowNoQueries = false,              // accept a run() with zero measured queries
 ): void;
 
 protected function assertQueryScaling(
@@ -172,6 +181,7 @@ protected function assertQueryScaling(
     ?IsolationStrategy $isolation = null,
     bool $showBindings = false,
     bool $normalizeLiterals = false,
+    bool $allowNoQueries = false,
 ): void;
 ```
 
@@ -276,6 +286,9 @@ scale-dependent data setup.
   left the physical transaction unavailable, or ran implicit-commit DDL such as MySQL
   `CREATE TABLE`/`ALTER TABLE`. Keep transaction ownership inside the assertion scope and move
   schema changes to setup/migrations.
+- **"measured no queries":** `run()` issued no queries on the measured connections. Check the
+  `connections:` argument and that `run()` reads the populated data; pass `allowNoQueries: true`
+  only if a query-free scenario is intended.
 - **Overlapping measurement `LogicException`:** a scaling assertion was started from inside
   another measured callback. Move the nested assertion outside the callback.
 - **Misapplied-trait `RuntimeException`:** use `QueryScalingAssertions` on a booted

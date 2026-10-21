@@ -116,7 +116,9 @@ final class QueryScalingAssertionsTest extends TestCase
         $this->assertQueriesScaleConstantly(
             scales: [2, 5, 10],
             populate: $this->blogPopulate(),
-            run: static fn () => null,
+            run: static function (): void {
+                Post::query()->count();
+            },
         );
     }
 
@@ -138,7 +140,9 @@ final class QueryScalingAssertionsTest extends TestCase
                     $post->comments()->count();
                 });
             },
-            run: static fn () => null,
+            run: static function (): void {
+                Post::query()->count();
+            },
         );
 
         $this->assertSame(3, $warmupCalls);
@@ -248,7 +252,9 @@ final class QueryScalingAssertionsTest extends TestCase
         $this->assertQueriesScaleConstantly(
             scales: [2, 5],
             populate: $this->blogPopulate(),
-            run: static fn () => null,
+            run: static function (): void {
+                Post::query()->count();
+            },
         );
     }
 
@@ -297,7 +303,9 @@ final class QueryScalingAssertionsTest extends TestCase
         $this->assertQueriesScaleConstantly(
             scales: [2, 5, 10],
             populate: static fn (int $scale) => null, // no DB writes: fake isolation is enough here
-            run: static fn () => null,
+            run: static function (): void {
+                Post::query()->count();
+            },
             isolation: $isolation,
         );
 
@@ -358,6 +366,56 @@ final class QueryScalingAssertionsTest extends TestCase
             populate: $populate,
             expectation: QueryGrowth::atMostSlope(0, 1),
             run: $run,
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // A run() without measured queries must not pass vacuously
+    // ------------------------------------------------------------------
+
+    public function test_run_without_measured_queries_fails_instead_of_passing_vacuously(): void
+    {
+        try {
+            $this->assertQueriesScaleConstantly(
+                scales: [2, 5],
+                populate: $this->blogPopulate(),
+                run: static fn () => null,
+            );
+        } catch (ExpectationFailedException $e) {
+            $this->assertStringContainsString('measured no queries', $e->getMessage());
+            $this->assertStringContainsString('connection(s) [testing]', $e->getMessage());
+            $this->assertStringContainsString('at every scale (2, 5)', $e->getMessage());
+
+            return;
+        }
+
+        $this->fail('Expected ExpectationFailedException for a run() without measured queries.');
+    }
+
+    public function test_queries_only_on_unmeasured_connections_count_as_no_queries(): void
+    {
+        $this->createWidgetsTable('secondary');
+
+        $this->expectException(ExpectationFailedException::class);
+        $this->expectExceptionMessage('measured no queries');
+
+        $this->assertQueryScaling(
+            scales: [2, 5],
+            populate: $this->blogPopulate(),
+            expectation: QueryGrowth::atMostSlope(1),
+            run: function (): void {
+                $this->db()->connection('secondary')->select('select * from widgets');
+            },
+        );
+    }
+
+    public function test_allow_no_queries_accepts_a_query_free_run(): void
+    {
+        $this->assertQueriesScaleConstantly(
+            scales: [2, 5],
+            populate: $this->blogPopulate(),
+            run: static fn () => null,
+            allowNoQueries: true,
         );
     }
 

@@ -41,6 +41,7 @@ trait QueryScalingAssertions
      * @param  Closure(): void  $run  measured scenario; executed once per scale factor
      * @param  (Closure(int): void)|null  $warmup  optional per-scale warmup; its queries are not measured
      * @param  list<mixed>|string|null  $connections  measured connections; null = default
+     * @param  bool  $allowNoQueries  accept a run() that issues no measured queries at any scale
      */
     protected function assertQueriesScaleConstantly(
         array $scales,
@@ -52,6 +53,7 @@ trait QueryScalingAssertions
         ?IsolationStrategy $isolation = null,
         bool $showBindings = false,
         bool $normalizeLiterals = false,
+        bool $allowNoQueries = false,
     ): void {
         $this->assertQueryScaling(
             scales: $scales,
@@ -63,6 +65,7 @@ trait QueryScalingAssertions
             isolation: $isolation,
             showBindings: $showBindings,
             normalizeLiterals: $normalizeLiterals,
+            allowNoQueries: $allowNoQueries,
         );
     }
 
@@ -77,6 +80,7 @@ trait QueryScalingAssertions
      * @param  Closure(): void  $run
      * @param  (Closure(int): void)|null  $warmup
      * @param  list<mixed>|string|null  $connections
+     * @param  bool  $allowNoQueries  accept a run() that issues no measured queries at any scale
      */
     protected function assertQueryScaling(
         array $scales,
@@ -88,6 +92,7 @@ trait QueryScalingAssertions
         ?IsolationStrategy $isolation = null,
         bool $showBindings = false,
         bool $normalizeLiterals = false,
+        bool $allowNoQueries = false,
     ): void {
         $factors = ScaleFactors::make($scales);
         $connectionNames = $this->resolveQueryScalingConnections($connections);
@@ -98,6 +103,19 @@ trait QueryScalingAssertions
         );
 
         $series = $runner->run($factors, $populate, $warmup, $run, $normalizeLiterals);
+
+        // An all-zero series satisfies every growth contract vacuously; it
+        // almost always means run() used an unmeasured connection or never
+        // touched the populated data, so it fails unless explicitly allowed.
+        if (! $allowNoQueries && array_sum($series->counts()) === 0) {
+            throw new ExpectationFailedException(sprintf(
+                'Query scaling assertion measured no queries: run() issued 0 queries on connection(s) [%s] '
+                .'at every scale (%s), so any scaling contract would pass vacuously. Make run() query the '
+                .'measured connection(s), or pass allowNoQueries: true if a query-free scenario is intended.',
+                implode(', ', $connectionNames),
+                implode(', ', $series->scales()),
+            ));
+        }
 
         $result = $expectation->evaluate($series);
 
