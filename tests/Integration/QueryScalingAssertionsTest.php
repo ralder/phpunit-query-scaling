@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use PHPUnit\Framework\ExpectationFailedException;
 use Ralder\QueryScaling\Assertions\QueryScalingAssertions;
 use Ralder\QueryScaling\Core\IsolationStrategy;
+use Ralder\QueryScaling\Core\RecordedQuery;
 use Ralder\QueryScaling\QueryGrowth;
 use Ralder\QueryScaling\Tests\Integration\Fixtures\Post;
 use RuntimeException;
@@ -416,6 +417,51 @@ final class QueryScalingAssertionsTest extends TestCase
             populate: $this->blogPopulate(),
             run: static fn () => null,
             allowNoQueries: true,
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // Ignore filter removes noise queries from the measurement
+    // ------------------------------------------------------------------
+
+    public function test_ignore_filter_excludes_noise_queries_from_the_contract(): void
+    {
+        $this->createWidgetsTable();
+
+        $run = function (): void {
+            Post::query()->count();
+            // scale-dependent noise, e.g. a session or cache table touched per item
+            for ($i = 0, $n = Post::query()->count(); $i < $n; $i++) {
+                $this->db()->connection()->select('select * from widgets where id = ?', [$i + 1]);
+            }
+        };
+
+        try {
+            $this->assertQueriesScaleConstantly(scales: [2, 5], populate: $this->blogPopulate(), run: $run);
+            $this->fail('the noise queries must grow the count without an ignore filter');
+        } catch (ExpectationFailedException) {
+        }
+
+        $this->assertQueriesScaleConstantly(
+            scales: [2, 5],
+            populate: $this->blogPopulate(),
+            run: $run,
+            ignore: static fn (RecordedQuery $query): bool => str_contains($query->sql, 'widgets'),
+        );
+    }
+
+    public function test_ignoring_every_query_is_reported_as_no_queries(): void
+    {
+        $this->expectException(ExpectationFailedException::class);
+        $this->expectExceptionMessage('the ignore filter may have excluded every query');
+
+        $this->assertQueriesScaleConstantly(
+            scales: [2, 5],
+            populate: $this->blogPopulate(),
+            run: static function (): void {
+                Post::query()->count();
+            },
+            ignore: static fn (RecordedQuery $query): bool => true,
         );
     }
 

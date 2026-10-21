@@ -8,7 +8,8 @@ use Closure;
 
 /**
  * Executes the same scenario once per scale factor, each time in a fresh
- * isolation scope, and records only the queries of the run callback.
+ * isolation scope, and records only the queries of the run callback
+ * (minus those the optional ignore filter excludes).
  *
  * Lifecycle per scale:
  *   isolation.begin() -> populate(scale) -> [warmup(scale)] ->
@@ -25,6 +26,7 @@ final class ScaleRunner
      * @param  Closure(int): void  $populate  creates the dataset for the scale
      * @param  (Closure(int): void)|null  $warmup  optional per-scale warmup; must not mutate the dataset
      * @param  Closure(): mixed  $run  the scenario under measurement
+     * @param  (Closure(RecordedQuery): bool)|null  $ignore  returns true for queries to exclude
      */
     public function run(
         ScaleFactors $scales,
@@ -32,6 +34,7 @@ final class ScaleRunner
         ?Closure $warmup,
         Closure $run,
         bool $normalizeLiterals = false,
+        ?Closure $ignore = null,
     ): MeasurementSeries {
         $measurements = [];
 
@@ -48,6 +51,13 @@ final class ScaleRunner
                 $queries = $this->collector->measure($run);
             } finally {
                 $this->isolation->restore();
+            }
+
+            if ($ignore !== null) {
+                $queries = array_values(array_filter(
+                    $queries,
+                    static fn (RecordedQuery $query): bool => ! $ignore($query),
+                ));
             }
 
             $measurements[] = new ScaleMeasurement($scale, $queries, $normalizeLiterals);

@@ -169,6 +169,7 @@ protected function assertQueriesScaleConstantly(
     bool $showBindings = false,                // print ≤3 example bindings per growing fingerprint
     bool $normalizeLiterals = false,           // opt-in literal folding in fingerprints
     bool $allowNoQueries = false,              // accept a run() with zero measured queries
+    ?Closure(RecordedQuery): bool $ignore = null, // return true to exclude a query from measurement
 ): void;
 
 protected function assertQueryScaling(
@@ -182,6 +183,7 @@ protected function assertQueryScaling(
     bool $showBindings = false,
     bool $normalizeLiterals = false,
     bool $allowNoQueries = false,
+    ?Closure(RecordedQuery): bool $ignore = null,
 ): void;
 ```
 
@@ -244,6 +246,26 @@ same connection. Parameter values never change the fingerprint.
 Opt-in `normalizeLiterals: true` additionally folds string and numeric literals into `?`. It is
 a heuristic (useful when Eloquent is bypassed and raw SQL interpolates values) and is off by
 default; report the SQL you actually saw before enabling it.
+
+## Ignoring queries
+
+Infrastructure queries (sessions, cache or lock tables, Telescope/Pulse recorders) can grow with
+the request rather than with your data model and pollute the contract. Exclude them with
+`ignore:` instead of widening `tolerance`, which would also hide real growth:
+
+```php
+use Ralder\QueryScaling\Core\RecordedQuery;
+
+$this->assertQueriesScaleConstantly(
+    scales: [2, 5, 10],
+    populate: fn (int $scale) => Post::factory()->count($scale)->create(),
+    run: fn () => $this->getJson('/api/posts')->assertSuccessful(),
+    ignore: fn (RecordedQuery $query): bool => str_contains($query->sql, '"sessions"'),
+);
+```
+
+The filter receives each measured query (`connection`, raw `sql`, `bindings`) and runs before
+fingerprinting; excluded queries appear neither in the counts nor in the failure report.
 
 ## Custom isolation
 

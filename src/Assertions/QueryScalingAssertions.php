@@ -14,6 +14,7 @@ use InvalidArgumentException;
 use PHPUnit\Framework\ExpectationFailedException;
 use Ralder\QueryScaling\Core\ConstantQueryCount;
 use Ralder\QueryScaling\Core\IsolationStrategy;
+use Ralder\QueryScaling\Core\RecordedQuery;
 use Ralder\QueryScaling\Core\Report\FailureReportRenderer;
 use Ralder\QueryScaling\Core\ScaleFactors;
 use Ralder\QueryScaling\Core\ScaleRunner;
@@ -42,6 +43,7 @@ trait QueryScalingAssertions
      * @param  (Closure(int): void)|null  $warmup  optional per-scale warmup; its queries are not measured
      * @param  list<mixed>|string|null  $connections  measured connections; null = default
      * @param  bool  $allowNoQueries  accept a run() that issues no measured queries at any scale
+     * @param  (Closure(RecordedQuery): bool)|null  $ignore  returns true for queries to exclude from measurement
      */
     protected function assertQueriesScaleConstantly(
         array $scales,
@@ -54,6 +56,7 @@ trait QueryScalingAssertions
         bool $showBindings = false,
         bool $normalizeLiterals = false,
         bool $allowNoQueries = false,
+        ?Closure $ignore = null,
     ): void {
         $this->assertQueryScaling(
             scales: $scales,
@@ -66,6 +69,7 @@ trait QueryScalingAssertions
             showBindings: $showBindings,
             normalizeLiterals: $normalizeLiterals,
             allowNoQueries: $allowNoQueries,
+            ignore: $ignore,
         );
     }
 
@@ -81,6 +85,7 @@ trait QueryScalingAssertions
      * @param  (Closure(int): void)|null  $warmup
      * @param  list<mixed>|string|null  $connections
      * @param  bool  $allowNoQueries  accept a run() that issues no measured queries at any scale
+     * @param  (Closure(RecordedQuery): bool)|null  $ignore  returns true for queries to exclude from measurement
      */
     protected function assertQueryScaling(
         array $scales,
@@ -93,6 +98,7 @@ trait QueryScalingAssertions
         bool $showBindings = false,
         bool $normalizeLiterals = false,
         bool $allowNoQueries = false,
+        ?Closure $ignore = null,
     ): void {
         $factors = ScaleFactors::make($scales);
         $connectionNames = $this->resolveQueryScalingConnections($connections);
@@ -102,7 +108,7 @@ trait QueryScalingAssertions
             $isolation ?? LaravelTransactionIsolation::forConnections($this->queryScalingDatabase(), $connectionNames),
         );
 
-        $series = $runner->run($factors, $populate, $warmup, $run, $normalizeLiterals);
+        $series = $runner->run($factors, $populate, $warmup, $run, $normalizeLiterals, $ignore);
 
         // An all-zero series satisfies every growth contract vacuously; it
         // almost always means run() used an unmeasured connection or never
@@ -111,9 +117,10 @@ trait QueryScalingAssertions
             throw new ExpectationFailedException(sprintf(
                 'Query scaling assertion measured no queries: run() issued 0 queries on connection(s) [%s] '
                 .'at every scale (%s), so any scaling contract would pass vacuously. Make run() query the '
-                .'measured connection(s), or pass allowNoQueries: true if a query-free scenario is intended.',
+                .'measured connection(s), or pass allowNoQueries: true if a query-free scenario is intended.%s',
                 implode(', ', $connectionNames),
                 implode(', ', $series->scales()),
+                $ignore !== null ? ' Note: the ignore filter may have excluded every query.' : '',
             ));
         }
 
